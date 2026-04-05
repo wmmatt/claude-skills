@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1 -- 2026-04-04
+
+### Added
+- Rule 8 in SKILL.md: every change to the skill must bump VERSION and add a CHANGELOG entry in the same commit
+
 ## 1.2.0 -- 2026-04-04
 
 ### Fixed

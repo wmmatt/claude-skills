@@ -366,6 +366,11 @@ Report only what changed. Don't re-run the full scan.
 
 7. **Update the profile.** When you detect changes that affect the app's tier or data sensitivity, update `.securecode/profile.json` and re-evaluate active categories.
 
+8. **Version and changelog on every change.** When modifying ANY file in this skill (SKILL.md, hooks, README, etc.), you MUST also:
+   - Bump the version in `VERSION` (semver: patch for fixes, minor for features, major for breaking changes)
+   - Add an entry to `CHANGELOG.md` describing what changed
+   - Do this in the same commit as the change
+
 ---
 
 ## Standards Reference: The 17 Categories
