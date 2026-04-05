@@ -115,7 +115,72 @@ For Mermaid style directives on highlighted nodes, use dark fills with bright bo
 - Critical (red): `style NodeName fill:#991b1b,color:#ffffff,stroke:#ef4444,stroke-width:2px`
 - Warning (orange): `style NodeName fill:#92400e,color:#ffffff,stroke:#f97316,stroke-width:2px`
 
-After writing the diagrams, generate a self-contained HTML file at `.securecode/diagrams.html` that renders the Mermaid diagrams using the Mermaid CDN (`https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js`) with dark theme, legend for red/orange highlights, and proper styling. Then open the HTML file in the user's browser using `open` (macOS) or `xdg-open` (Linux) so they can immediately see the rendered diagrams.
+After writing the diagrams, generate `.securecode/diagrams.html` using this EXACT template structure. Mermaid REQUIRES `<pre class="mermaid">` tags -- any other wrapper (code blocks, div, pre without the class) will NOT render.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Architecture Diagrams</title>
+  <style>
+    body { background: #0f172a; color: #e2e8f0; font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 2rem; }
+    h1, h2 { color: #f8fafc; }
+    .legend { display: flex; gap: 2rem; margin: 1.5rem 0; padding: 1rem; background: #1e293b; border-radius: 8px; }
+    .legend-item { display: flex; align-items: center; gap: 0.5rem; }
+    .legend-swatch { width: 20px; height: 20px; border-radius: 4px; }
+    .swatch-critical { background: #991b1b; border: 2px solid #ef4444; }
+    .swatch-warning { background: #92400e; border: 2px solid #f97316; }
+    .swatch-normal { background: #1e293b; border: 2px solid #64748b; }
+    .diagram-section { margin: 2rem 0; padding: 1.5rem; background: #1e293b; border-radius: 8px; }
+    .findings { margin: 2rem 0; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: 0.75rem; border-bottom: 1px solid #334155; }
+    th { color: #94a3b8; }
+    .subtitle { color: #94a3b8; margin-top: -0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>PROJECT_NAME -- Security Architecture Diagrams</h1>
+  <p class="subtitle">Generated: DATE | Framework: Secure Code Profiling v1.1 | Tier: TIER_NAME</p>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch swatch-critical"></div> Critical -- unencrypted sensitive data or unauthenticated endpoint</div>
+    <div class="legend-item"><div class="legend-swatch swatch-warning"></div> Warning -- manual auth guard, no middleware backstop</div>
+    <div class="legend-item"><div class="legend-swatch swatch-normal"></div> Normal -- properly protected</div>
+  </div>
+
+  <h2>1. Data Flow Diagram</h2>
+  <div class="diagram-section">
+    <pre class="mermaid">
+      YOUR MERMAID DATA FLOW CODE HERE
+    </pre>
+  </div>
+
+  <h2>2. Auth Flow Diagram</h2>
+  <div class="diagram-section">
+    <pre class="mermaid">
+      YOUR MERMAID AUTH FLOW CODE HERE
+    </pre>
+  </div>
+
+  <div class="findings">
+    <h2>3. Summary of Findings</h2>
+    FINDINGS TABLE HERE
+  </div>
+
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'dark', securityLevel: 'loose' });
+  </script>
+</body>
+</html>
+```
+
+CRITICAL: Use `<pre class="mermaid">` for each diagram. Do NOT wrap in markdown code fences, `<code>` tags, or `<div>` tags. The Mermaid ESM module auto-detects and renders elements with class="mermaid" on page load.
+
+Then open the HTML file in the user's browser using `open` (macOS) or `xdg-open` (Linux).
 
 ### Step 6: Store the Profile
 
