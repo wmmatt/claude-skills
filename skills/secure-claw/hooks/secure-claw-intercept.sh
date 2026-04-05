@@ -163,6 +163,14 @@ WARNED=""
 CHECKED=""
 
 for PKG in $PACKAGES; do
+  # Extract version from specifier before stripping (axios@1.7.2 -> 1.7.2, package>=1.0 -> 1.0)
+  CMD_VER=""
+  if echo "$PKG" | grep -q '@[0-9]'; then
+    CMD_VER=$(echo "$PKG" | sed 's/.*@//')
+  elif echo "$PKG" | grep -q '[><=][0-9]'; then
+    CMD_VER=$(echo "$PKG" | sed 's/.*[><=]//')
+  fi
+
   # Strip version specifier (axios@1.7.2 -> axios, package>=1.0 -> package, github.com/foo/bar -> bar)
   PKG_NAME=$(echo "$PKG" | sed 's/@.*//' | sed 's/[<>=].*//' | sed 's#.*/##')
 
@@ -215,10 +223,17 @@ for PKG in $PACKAGES; do
   fi
 
   # --- Check 3: GitHub Advisory Database (always runs as supplement) ---
-  # Resolve installed version for accurate filtering (runners + package installs)
+  # Resolve target version for accurate filtering
+  # Priority: 1) already installed, 2) version from command, 3) registry latest
   INSTALLED_VER=""
   if [ -f "node_modules/${PKG_NAME}/package.json" ]; then
     INSTALLED_VER=$(jq -r '.version // empty' "node_modules/${PKG_NAME}/package.json" 2>/dev/null)
+  fi
+  if [ -z "$INSTALLED_VER" ] && [ -n "$CMD_VER" ]; then
+    INSTALLED_VER="$CMD_VER"
+  fi
+  if [ -z "$INSTALLED_VER" ] && [ "$ECOSYSTEM" = "npm" ]; then
+    INSTALLED_VER=$(npm view "$PKG_NAME" version 2>/dev/null)
   fi
 
   HAS_VULN=0
