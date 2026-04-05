@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 -- 2026-04-04
+
+### Fixed
+- Mermaid diagrams now render correctly in `.securecode/diagrams.html` -- added explicit HTML template with `<pre class="mermaid">` tags and ESM module import. Previously diagrams showed as raw code.
+
+### Changed
+- Block messages now include full context: GHSA advisory ID, vulnerability summary, affected version range, patched version, resolved installed version, and actionable guidance. Socket blocks include a link to the package's Socket.dev review page.
+
 ## 1.1.0 -- 2026-04-04
 
 ### Fixed
