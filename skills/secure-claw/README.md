@@ -14,6 +14,24 @@ curl -sL https://raw.githubusercontent.com/wmmatt/claude-skills/main/skills/secu
   -o ~/.claude/skills/secure-claw/SKILL.md --create-dirs
 ```
 
+## Update
+
+Re-run the install command above to pull the latest SKILL.md. If you installed hooks, also update them:
+
+```bash
+# Update hooks
+for hook in secure-claw-intercept.sh secure-claw-session-start.sh secure-claw-session-end.sh; do
+  curl -sL "https://raw.githubusercontent.com/wmmatt/claude-skills/main/skills/secure-claw/hooks/${hook}" \
+    -o ~/.claude/hooks/${hook} && chmod +x ~/.claude/hooks/${hook}
+done
+```
+
+Check the [CHANGELOG](CHANGELOG.md) for what's new. Current version:
+
+```bash
+curl -s https://raw.githubusercontent.com/wmmatt/claude-skills/main/skills/secure-claw/VERSION
+```
+
 ## What it does
 
 On first encounter with a project, the skill:
