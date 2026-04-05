@@ -215,16 +215,58 @@ for PKG in $PACKAGES; do
   fi
 
   # --- Check 3: GitHub Advisory Database (always runs as supplement) ---
+  # Resolve installed version for accurate filtering (runners + package installs)
+  INSTALLED_VER=""
+  if [ -f "node_modules/${PKG_NAME}/package.json" ]; then
+    INSTALLED_VER=$(jq -r '.version // empty' "node_modules/${PKG_NAME}/package.json" 2>/dev/null)
+  fi
+
   HAS_VULN=0
   VULN_DETAIL=""
   for SEV in critical high; do
     RESP=$(curl -s --max-time 10 -H "Accept: application/vnd.github+json" \
       "https://api.github.com/advisories?ecosystem=${ECOSYSTEM}&affects=${PKG_NAME}&severity=${SEV}&per_page=5" 2>/dev/null)
     if echo "$RESP" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1; then
-      COUNT=$(echo "$RESP" | jq 'length')
-      SUMMARY=$(echo "$RESP" | jq -r '.[0].summary // "Unknown"' | head -c 80)
-      VULN_DETAIL="$VULN_DETAIL ${SEV}:${COUNT}"
-      HAS_VULN=1
+      if [ -n "$INSTALLED_VER" ]; then
+        # Filter: only count advisories where installed version is still vulnerable
+        # An advisory applies if installed version is in the vulnerable range AND
+        # either there's no patch yet, or the installed version is below the patched version
+        FILTERED=$(echo "$RESP" | jq --arg ver "$INSTALLED_VER" '
+          [.[] | select(
+            any(.vulnerabilities[]?;
+              # Check if first_patched_version exists
+              (.first_patched_version.identifier // null) as $patched |
+              if $patched == null then
+                # No patch available -- still vulnerable
+                true
+              else
+                # Compare installed version against patched version
+                # Split versions into arrays of numbers for comparison
+                ($ver | split(".") | map(tonumber? // 0)) as $inst |
+                ($patched | split(".") | map(tonumber? // 0)) as $patch |
+                # Installed is vulnerable if it is less than the patched version
+                if ($inst[0] < $patch[0]) then true
+                elif ($inst[0] == $patch[0] and $inst[1] < $patch[1]) then true
+                elif ($inst[0] == $patch[0] and $inst[1] == $patch[1] and $inst[2] < $patch[2]) then true
+                else false
+                end
+              end
+            )
+          )]
+        ' 2>/dev/null)
+        COUNT=$(echo "$FILTERED" | jq 'length' 2>/dev/null)
+        if [ "${COUNT:-0}" -gt 0 ]; then
+          SUMMARY=$(echo "$FILTERED" | jq -r '.[0].summary // "Unknown"' | head -c 80)
+          VULN_DETAIL="$VULN_DETAIL ${SEV}:${COUNT}"
+          HAS_VULN=1
+        fi
+      else
+        # No installed version found -- block conservatively
+        COUNT=$(echo "$RESP" | jq 'length')
+        SUMMARY=$(echo "$RESP" | jq -r '.[0].summary // "Unknown"' | head -c 80)
+        VULN_DETAIL="$VULN_DETAIL ${SEV}:${COUNT}"
+        HAS_VULN=1
+      fi
     fi
   done
 
