@@ -178,7 +178,7 @@ for PKG in $PACKAGES; do
 
   # --- Check 1: Hardcoded blocklist ---
   if echo "$KNOWN_BAD" | grep -qw "$PKG_NAME"; then
-    BLOCKED="$BLOCKED $PKG_NAME (KNOWN COMPROMISED)"
+    BLOCKED="$BLOCKED $PKG_NAME (KNOWN COMPROMISED -- this package has a documented history of supply chain compromise or malicious code. Do not install under any circumstances.)"
     continue
   fi
 
@@ -199,10 +199,10 @@ for PKG in $PACKAGES; do
       ' 2>/dev/null)
 
       if [ "${HAS_CRITICAL:-0}" -gt 0 ]; then
-        ALERT_SUMMARY=$(echo "$SOCKET_RESP" | jq -r '
-          .alerts // [] | map(select(.severity == "critical" or .severity == "high")) | .[0].type // "unknown risk"
+        ALERT_TYPES=$(echo "$SOCKET_RESP" | jq -r '
+          .alerts // [] | map(select(.severity == "critical" or .severity == "high")) | map(.type // "unknown") | unique | join(", ")
         ' 2>/dev/null)
-        BLOCKED="$BLOCKED $PKG_NAME (Socket: ${HAS_CRITICAL} critical/high alerts -- $ALERT_SUMMARY)"
+        BLOCKED="$BLOCKED $PKG_NAME (Socket: ${HAS_CRITICAL} critical/high alerts -- types: ${ALERT_TYPES}. Socket.dev flagged this package for supply chain risk. Review at https://socket.dev/npm/package/${PKG_NAME} before installing.)"
         continue
       fi
     fi
@@ -238,6 +238,7 @@ for PKG in $PACKAGES; do
 
   HAS_VULN=0
   VULN_DETAIL=""
+  ADV_DETAIL=""
   for SEV in critical high; do
     RESP=$(curl -s --max-time 10 -H "Accept: application/vnd.github+json" \
       "https://api.github.com/advisories?ecosystem=${ECOSYSTEM}&affects=${PKG_NAME}&severity=${SEV}&per_page=5" 2>/dev/null)
@@ -271,22 +272,30 @@ for PKG in $PACKAGES; do
         ' 2>/dev/null)
         COUNT=$(echo "$FILTERED" | jq 'length' 2>/dev/null)
         if [ "${COUNT:-0}" -gt 0 ]; then
-          SUMMARY=$(echo "$FILTERED" | jq -r '.[0].summary // "Unknown"' | head -c 80)
+          SUMMARY=$(echo "$FILTERED" | jq -r '.[0].summary // "Unknown"' | head -c 120)
+          GHSA_ID=$(echo "$FILTERED" | jq -r '.[0].ghsa_id // "unknown"' 2>/dev/null)
+          VULN_RANGE=$(echo "$FILTERED" | jq -r '[.[0].vulnerabilities[]? | .vulnerable_version_range // empty] | join(", ")' 2>/dev/null)
+          PATCHED_AT=$(echo "$FILTERED" | jq -r '[.[0].vulnerabilities[]? | .first_patched_version.identifier // empty] | join(", ")' 2>/dev/null)
           VULN_DETAIL="$VULN_DETAIL ${SEV}:${COUNT}"
+          ADV_DETAIL="${ADV_DETAIL}${SEV} [${GHSA_ID}]: ${SUMMARY}. Affected: ${VULN_RANGE}. Patched in: ${PATCHED_AT:-no patch available}. Installed: ${INSTALLED_VER}. "
           HAS_VULN=1
         fi
       else
         # No installed version found -- block conservatively
         COUNT=$(echo "$RESP" | jq 'length')
-        SUMMARY=$(echo "$RESP" | jq -r '.[0].summary // "Unknown"' | head -c 80)
+        SUMMARY=$(echo "$RESP" | jq -r '.[0].summary // "Unknown"' | head -c 120)
+        GHSA_ID=$(echo "$RESP" | jq -r '.[0].ghsa_id // "unknown"' 2>/dev/null)
+        VULN_RANGE=$(echo "$RESP" | jq -r '[.[0].vulnerabilities[]? | .vulnerable_version_range // empty] | join(", ")' 2>/dev/null)
+        PATCHED_AT=$(echo "$RESP" | jq -r '[.[0].vulnerabilities[]? | .first_patched_version.identifier // empty] | join(", ")' 2>/dev/null)
         VULN_DETAIL="$VULN_DETAIL ${SEV}:${COUNT}"
+        ADV_DETAIL="${ADV_DETAIL}${SEV} [${GHSA_ID}]: ${SUMMARY}. Affected: ${VULN_RANGE}. Patched in: ${PATCHED_AT:-no patch available}. Version could not be resolved -- blocking conservatively. "
         HAS_VULN=1
       fi
     fi
   done
 
   if [ "$HAS_VULN" -eq 1 ]; then
-    BLOCKED="$BLOCKED $PKG_NAME (GitHub Advisory:$VULN_DETAIL -- $SUMMARY)"
+    BLOCKED="$BLOCKED $PKG_NAME (GitHub Advisory:$VULN_DETAIL -- $ADV_DETAIL)"
     continue
   fi
 
