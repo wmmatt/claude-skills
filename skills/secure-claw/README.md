@@ -1,54 +1,87 @@
 # secure-claw
 
-A Claude Code skill that scans your project against 17 defined security categories, intercepts unsafe package installs, and generates data flow diagrams with weaknesses highlighted.
+**Intercepts and blocks malicious package installs before they execute. Then audits your entire codebase against a 17-category security checklist.**
 
-## Quick install
+---
 
-```bash
-# Per-project
-curl -sL https://raw.githubusercontent.com/wmmatt/claude-skills/main/skills/secure-claw/SKILL.md \
-  -o .claude/skills/secure-claw/SKILL.md --create-dirs
-
-# Global (all projects)
-curl -sL https://raw.githubusercontent.com/wmmatt/claude-skills/main/skills/secure-claw/SKILL.md \
-  -o ~/.claude/skills/secure-claw/SKILL.md --create-dirs
-```
-
-## Update
-
-Re-run the install command above to pull the latest SKILL.md. If you installed hooks, also update them:
+## Install
 
 ```bash
-# Update hooks
-for hook in secure-claw-intercept.sh secure-claw-session-start.sh secure-claw-session-end.sh; do
-  curl -sL "https://raw.githubusercontent.com/wmmatt/claude-skills/main/skills/secure-claw/hooks/${hook}" \
-    -o ~/.claude/hooks/${hook} && chmod +x ~/.claude/hooks/${hook}
-done
+curl -sL https://raw.githubusercontent.com/wmmatt/claude-skills/main/skills/secure-claw/install.sh | bash
 ```
 
-Check the [CHANGELOG](CHANGELOG.md) for what's new. Current version:
+That's it. The script downloads SKILL.md, installs the three hook scripts, and merges the hook configuration into `~/.claude/settings.json` without touching your existing settings. Safe to run multiple times.
 
-```bash
-curl -s https://raw.githubusercontent.com/wmmatt/claude-skills/main/skills/secure-claw/VERSION
+---
+
+## The killer feature: install interception
+
+When Claude tries to run `npm install`, `pip install`, `cargo add`, or any other package install, secure-claw intercepts it first-- before anything hits your filesystem.
+
+It checks every package against:
+1. A hardcoded blocklist of known-compromised packages (including `litellm`, `event-stream`, `ua-parser-js`, and others)
+2. Socket.dev API -- catches supply chain attacks, typosquatting, and malicious install scripts
+3. GitHub Advisory Database -- catches known CVEs
+
+If anything looks wrong, it blocks the install and tells you why.
+
+**What a block looks like:**
+
+```
+SECURE CLAW BLOCKED: litellm (KNOWN COMPROMISED)
 ```
 
-## What it does
+```
+SECURE CLAW BLOCKED: some-package (Socket: 3 critical/high alerts -- malicious install script)
+```
 
-On first encounter with a project, the skill:
+```
+SECURE CLAW BLOCKED: axios (GitHub Advisory: critical:2 -- Prototype Pollution in axios)
+```
 
-1. **Profiles your app** -- reads your codebase to determine stack, data stores, auth method, payment integrations, and data sensitivity. Asks targeted questions only for what it can't figure out from the code.
-2. **Determines your tier** -- not every app needs every check. A static HTML site gets 2 categories. A full-stack app with sensitive data gets 15. A multi-tenant SaaS gets all 17.
-3. **Scans against a defined checklist** -- not ad-hoc "let me find something wrong." A fixed list of standards, checked consistently every time.
-4. **Generates data flow and auth flow diagrams** -- with weaknesses highlighted in red so you can see where the gaps are.
-5. **Stores a profile** in `.securecode/profile.json` so subsequent sessions are fast.
+```
+SECURE CLAW BLOCKED: Piped install script detected (curl/wget | bash). This downloads and
+executes arbitrary code with no review. Download the script first, review it, then run it.
+```
 
-On every session after that:
+**What a clean install looks like:**
 
-- **Session start:** loads the profile, runs applicable checks, reports findings
-- **Install interception:** catches `npm install` / `pip install` / `cargo add` / `curl | bash` before execution, checks packages against Socket.dev + GitHub Advisory Database
-- **Session end:** re-scans for changes introduced during the session
+```
+SECURE CLAW: axios(Socket+Advisory:clean) zod(Socket+Advisory:clean)
+```
 
-## The 17 categories
+**Warnings (not blocked, but flagged for review):**
+
+```
+SECURE CLAW WARNING: some-package (not on project allowlist) | Scanned clean: axios(Socket+Advisory:clean)
+```
+
+### What it intercepts
+
+| Pattern | Action |
+|---------|--------|
+| `npm install` / `yarn add` / `pnpm add` / `bun add` | Scan packages, block if flagged |
+| `pip install` / `pip3 install` | Scan packages, block if flagged |
+| `cargo add` / `cargo install` | Scan packages, block if flagged |
+| `go get` / `go install` | Scan packages, block if flagged |
+| `gem install` | Scan packages, block if flagged |
+| `composer require` | Scan packages, block if flagged |
+| `brew install` | Scan packages, block if flagged |
+| `apt-get install` / `dnf install` / etc. | Warn and ask |
+| `npx` / `bunx` / `pnpx` (runner packages) | Scan package, block if flagged |
+| `curl ... \| bash` / `wget ... \| sh` | Hard block -- always |
+| `curl ... -o ... && chmod +x` | Hard block -- always |
+| `make install` | Warn and ask -- human review required |
+
+---
+
+## Beyond install interception: the 17-category checklist
+
+secure-claw also profiles your project and runs a structured security audit. Not ad-hoc "let me look for problems" -- a fixed list of standards, checked the same way every time.
+
+On first run it reads your codebase, determines your application tier, and runs the relevant checks. On every session after that, it loads the saved profile and reports findings at session start.
+
+### The 17 categories
 
 | # | Category | Applies to |
 |---|----------|------------|
@@ -70,9 +103,9 @@ On every session after that:
 | 16 | CI/CD Pipeline Security | Full-stack+ |
 | 17 | AI Config Hygiene + Access Control | Full-stack+ |
 
-## Application tiers
+### Application tiers
 
-The skill only activates the categories relevant to your project:
+The skill only activates categories relevant to your project:
 
 - **Static site** (flat HTML, docs) -- categories 3, 6
 - **Frontend SPA** (React/Vue, no backend) -- categories 1-6, 9
@@ -80,26 +113,18 @@ The skill only activates the categories relevant to your project:
 - **Full-stack, sensitive data** (PII, PHI, financial) -- categories 1-13, 15-17
 - **Multi-tenant, sensitive data** (SaaS with customer isolation) -- all 17
 
-## Install interception
+### Smart profiling
 
-The intercept hook catches these patterns:
+The skill reads your actual code, not checkboxes:
 
-| Pattern | Action |
-|---------|--------|
-| `npm/pip/cargo/go/gem/composer install` | Scan packages |
-| `brew install` / `apt-get install` | Scan packages |
-| `curl \| bash` / `wget \| sh` | Hard block always |
-| `curl -o && chmod +x` | Hard block always |
-| `npx/bunx/pnpx <package>` | Scan the package |
-| `make install` | Warn, ask to verify |
+- Sees Stripe SDK >> asks if you're using Checkout (not in PCI scope) or handling cards server-side (in PCI scope)
+- Finds `ssn` or `medical_record` columns >> high sensitivity tier
+- Sees NextAuth/Auth0 >> delegated auth, lower risk than hand-rolled
+- Detects `tenant_id` patterns >> multi-tenant checks activate
 
-Packages are checked against:
-1. Hardcoded blocklist (known compromised packages)
-2. Socket.dev API (supply chain attacks, typosquatting, malware)
-3. GitHub Advisory Database (known CVEs)
-4. Project allowlist (`.securecode/allowlist.json`)
+Profile is stored in `.securecode/profile.json` so subsequent sessions skip the profiling step.
 
-## OWASP Top 10:2025 coverage
+### OWASP Top 10:2025 coverage
 
 | OWASP | Vulnerability | Covered by |
 |-------|---------------|------------|
@@ -114,10 +139,33 @@ Packages are checked against:
 | A09 | Logging Failures | 10 |
 | A10 | Exception Handling | 7 |
 
-## Hooks (optional auto-enforcement)
+---
 
-See the [root README](../../README.md#with-hooks-auto-enforcement) for hook installation instructions. The hooks automate:
+## Manual install (if you prefer)
 
-- **Session start** -- auto-profile or auto-scan on every new Claude Code session
-- **Install interception** -- block/warn before any package install command runs
-- **Session end** -- re-scan for changes made during the session
+### SKILL.md only (skill-based checks, no automatic interception)
+
+```bash
+curl -sL https://raw.githubusercontent.com/wmmatt/claude-skills/main/skills/secure-claw/SKILL.md \
+  -o ~/.claude/skills/secure-claw/SKILL.md --create-dirs
+```
+
+### Optional: Socket.dev for deeper supply chain scanning
+
+Socket.dev analyzes what a package's code actually *does*, not just whether a CVE has been filed. It catches malicious install scripts, obfuscated code, network access, and typosquatting -- the kind of thing that took down `event-stream` and the Axios compromise. secure-claw uses it automatically if it's installed.
+
+```bash
+npm install -g @socketsecurity/cli
+```
+
+---
+
+## How it works
+
+Three hooks, running automatically:
+
+- **Session start** -- loads your project's security profile, runs applicable checklist categories, reports findings (critical >> low)
+- **PreToolUse (Bash intercept)** -- fires before every `Bash` tool call; detects install patterns and scans packages before execution
+- **Session end** -- re-scans for security-relevant changes introduced during the session (new routes, new deps, new env vars)
+
+The SKILL.md gives Claude the full checklist methodology and profiling logic. The hooks enforce it at the system level -- Claude Code runs them automatically, no prompting required.
